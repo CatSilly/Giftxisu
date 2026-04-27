@@ -19,10 +19,13 @@ Bug Report
 ----------
 Encountering errors? Report them immediately in *Issues* so we can fix them.
 
-Some pictures
+Some screenshot
 -------------
-![IMAGE](docs/assets/picture/basket.png)
-> The Basket
+![IMAGE](/res/screenshot_1.jpg)
+> Basic gameplay
+
+![IMAGE](/res/screenshot_2.jpg)
+> "Game over" screen
 
 Licenses
 --------
