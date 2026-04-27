@@ -4,10 +4,9 @@
 > [!TIP]
 > Currently, the website only supports Vietnamese. You should use a translator if you don't understand (May broken the game)
 
-Giftxisu
+[Giftxisu](https://catsilly.github.io/Giftxisu/)
 ===
 A simple "gift-catching" game.
-
 Built using HTML, CSS, and JS.
 
 Featured
