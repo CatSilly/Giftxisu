@@ -19,6 +19,11 @@ Bug Report
 ----------
 Encountering errors? Report them immediately in *Issues* so we can fix them.
 
+Some pictures
+-------------
+![IMAGE](docs/assets/picture/basket.png)
+> The Basket
+
 Licenses
 --------
 - Both assets and source code of Giftxisu is currently using a separate license. Please refer to the [LICENSE](LICENSE) files.
