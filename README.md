@@ -6,6 +6,7 @@
 
 [Giftxisu](https://catsilly.github.io/Giftxisu/)
 ===
+![LOGO](res/logo.png)
 A simple "gift-catching" game.
 Built using HTML, CSS, and JS.
 
