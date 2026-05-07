@@ -1,0 +1,239 @@
+name: 🎮 Deploy Game to Platforms
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'game/**'         # Chỉ chạy khi có thay đổi trong thư mục game
+  workflow_dispatch:      # Cho phép chạy thủ công từ GitHub UI
+    inputs:
+      target:
+        description: 'Nền tảng muốn deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - itchio
+          - gamejolt
+          - github-pages
+          - netlify
+
+# ─────────────────────────────────────────────
+# CẤU HÌNH — chỉnh sửa các biến này cho phù hợp
+# ─────────────────────────────────────────────
+env:
+  GAME_DIR: docs
+  # Thư mục chứa game (index.html, style.css, script.js, ...)
+  GAME_NAME: giftxisu
+  BUTLER_VERSION: latest    # Phiên bản butler CLI của itch.io
+
+jobs:
+
+  # ════════════════════════════════════════════
+  # BUILD — Chuẩn bị / nén thư mục game
+  # ════════════════════════════════════════════
+  build:
+    name: 📦 Build Game
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: game-build-${{ github.run_number }}
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🗜️ Zip game folder
+        run: |
+          cd ${{ env.GAME_DIR }}
+          zip -r ../game-build.zip .
+          echo "✅ Đã nén game tại game-build.zip"
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-build-${{ github.run_number }}
+          path: |
+            ${{ env.GAME_DIR }}/
+            game-build.zip
+          retention-days: 7
+
+
+  # ════════════════════════════════════════════
+  # DEPLOY → itch.io  (butler push)
+  # ════════════════════════════════════════════
+  deploy-itchio:
+    name: 🕹️ Deploy → itch.io
+    runs-on: ubuntu-latest
+    needs: build
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.target == 'all' || github.event.inputs.target == 'itchio'))
+
+    steps:
+      - name: ⬇️ Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: game-build-${{ github.run_number }}
+          path: game-dist
+
+      - name: 🔧 Install Butler (itch.io CLI)
+        run: |
+          curl -L -o butler.zip \
+            https://broth.itch.ovh/butler/linux-amd64/LATEST/archive/default
+          unzip butler.zip
+          chmod +x butler
+          sudo mv butler /usr/local/bin/butler
+          butler version
+
+      - name: 🚀 Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.ITCHIO_API_KEY }}
+          # Format: username/game-slug:channel
+          # Ví dụ: johndoe/my-game:html5
+          ITCHIO_TARGET: ${{ secrets.ITCHIO_TARGET }}
+        run: |
+          butler push game-dist "$ITCHIO_TARGET" \
+            --userversion "${{ github.run_number }}"
+          echo "✅ Đã upload lên itch.io!"
+
+
+  # ════════════════════════════════════════════
+  # DEPLOY → Game Jolt  (API upload)
+  # ════════════════════════════════════════════
+  deploy-gamejolt:
+    name: 🎯 Deploy → Game Jolt
+    runs-on: ubuntu-latest
+    needs: build
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.target == 'all' || github.event.inputs.target == 'gamejolt'))
+
+    steps:
+      - name: ⬇️ Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: game-build-${{ github.run_number }}
+          path: game-dist
+
+      - name: 🗜️ Zip game
+        run: |
+          cd game-dist
+          zip -r ../game-gamejolt.zip .
+
+      - name: 🚀 Upload to Game Jolt via API
+        env:
+          GJ_GAME_ID: ${{ secrets.GAMEJOLT_GAME_ID }}
+          GJ_TOKEN: ${{ secrets.GAMEJOLT_TOKEN }}
+          GJ_PACKAGE_ID: ${{ secrets.GAMEJOLT_PACKAGE_ID }}
+          GJ_RELEASE_ID: ${{ secrets.GAMEJOLT_RELEASE_ID }}
+        run: |
+          echo "📡 Uploading build to Game Jolt..."
+          RESPONSE=$(curl -s -X POST \
+            "https://gamejolt.com/game-api/builds/add-file/${GJ_BUILD_ID}" \
+            -H "Authorization: Bearer ${GJ_TOKEN}" \
+            -F "file=@game-gamejolt.zip")
+          echo "Response: $RESPONSE"
+          echo "✅ Đã upload lên Game Jolt!"
+          # ℹ️ Tham khảo API đầy đủ tại: https://gamejolt.com/game-api/doc
+
+
+  # ════════════════════════════════════════════
+  # DEPLOY → GitHub Pages
+  # ════════════════════════════════════════════
+  deploy-github-pages:
+    name: 📄 Deploy → GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.target == 'all' || github.event.inputs.target == 'github-pages'))
+
+    permissions:
+      contents: write   # Cần quyền để push lên gh-pages
+
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⬇️ Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: game-build-${{ github.run_number }}
+          path: game-dist
+
+      - name: 🚀 Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: game-dist
+          publish_branch: gh-pages
+          commit_message: "🎮 Deploy game v${{ github.run_number }} [skip ci]"
+          force_orphan: true    # Giữ branch gh-pages gọn gàng
+
+
+  # ════════════════════════════════════════════
+  # DEPLOY → Netlify
+  # ════════════════════════════════════════════
+  deploy-netlify:
+    name: ⚡ Deploy → Netlify
+    runs-on: ubuntu-latest
+    needs: build
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.event.inputs.target == 'all' || github.event.inputs.target == 'netlify'))
+
+    steps:
+      - name: ⬇️ Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: game-build-${{ github.run_number }}
+          path: game-dist
+
+      - name: 🚀 Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: game-dist
+          production-branch: main
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "🎮 Game v${{ github.run_number }} deployed"
+          enable-pull-request-comment: false
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+
+  # ════════════════════════════════════════════
+  # SUMMARY — Tổng kết sau khi deploy xong
+  # ════════════════════════════════════════════
+  summary:
+    name: 📋 Deployment Summary
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-itchio
+      - deploy-gamejolt
+      - deploy-github-pages
+      - deploy-netlify
+    if: always()
+
+    steps:
+      - name: 📊 Print summary
+        run: |
+          echo "## 🎮 Game Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Nền tảng       | Trạng thái |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------------|------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🕹️ itch.io      | ${{ needs.deploy-itchio.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🎯 Game Jolt   | ${{ needs.deploy-gamejolt.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📄 GitHub Pages | ${{ needs.deploy-github-pages.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚡ Netlify      | ${{ needs.deploy-netlify.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build number:** \`${{ github.run_number }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
